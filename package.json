@@ -26,6 +26,7 @@
     "react-dom": "^19.2.0",
     "tailwindcss": "^4.1.18",
     "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.1",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
