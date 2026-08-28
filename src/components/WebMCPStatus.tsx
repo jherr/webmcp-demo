@@ -1,25 +1,53 @@
 import { useEffect, useState } from 'react'
 import { Cpu } from 'lucide-react'
+import type { WebMCPHost } from '../lib/webmcp'
 
 export default function WebMCPStatus() {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(
     'loading',
   )
   const [toolCount, setToolCount] = useState(0)
+  const [host, setHost] = useState<WebMCPHost | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
 
   useEffect(() => {
-    import('@mcp-b/global')
-      .then(() => import('../lib/webmcp'))
-      .then(({ registerWebMCPTools }) => registerWebMCPTools())
-      .then((count) => {
-        setToolCount(count)
+    const controller = new AbortController()
+    let cancelled = false
+
+    async function boot() {
+      try {
+        // Codex / ChatGPT use native document.modelContext — skip polyfill when present.
+        const hasNativeDocument =
+          typeof document !== 'undefined' &&
+          typeof document.modelContext?.registerTool === 'function'
+
+        if (!hasNativeDocument) {
+          await import('@mcp-b/global')
+        }
+
+        const { registerWebMCPTools } = await import('../lib/webmcp')
+        const result = await registerWebMCPTools({
+          signal: controller.signal,
+        })
+
+        if (cancelled) return
+        setToolCount(result.toolCount)
+        setHost(result.host)
         setStatus('ready')
-      })
-      .catch((err) => {
+      } catch (err) {
+        if (cancelled || controller.signal.aborted) return
+        if (err instanceof DOMException && err.name === 'AbortError') return
         setErrorMsg(String(err))
         setStatus('error')
-      })
+      }
+    }
+
+    void boot()
+
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
   }, [])
 
   return (
@@ -33,7 +61,7 @@ export default function WebMCPStatus() {
       )}
       {status === 'ready' && (
         <span className="text-green-400">
-          &gt; {toolCount} tools registered [OK]
+          &gt; {toolCount} tools via {host} [OK]
         </span>
       )}
       {status === 'error' && (
